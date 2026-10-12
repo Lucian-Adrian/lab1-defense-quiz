@@ -36,6 +36,8 @@ The result is labeled **Practice grade**. It is clamped to 1.0–10.0 from the n
 
 The board refreshes every four seconds and lists up to 2,000 attempts. A replay creates another attempt. The database is shared across visitors; production starts empty and does not include the design target's sample players.
 
+Temporary service errors preserve the displayed round and trigger automatic recovery. Delayed responses cannot replace a newer question or a fresh replay. The server continues enforcing deadlines while a phone reconnects.
+
 ## Focused local API test
 
 Start a local preview with D1 migrated, then run the API test against loopback. It creates test players in that local database, probes the first answer by normal quiz feedback, races duplicate submissions, waits through one timer, and checks that separate attempts appear on the same board.
@@ -45,6 +47,7 @@ PowerShell:
 ```powershell
 $env:QUIZ_TEST_ORIGIN = 'http://127.0.0.1:8787'
 node --test tests/quiz-api.test.mjs
+node --test tests/quiz-lifecycle.test.mjs
 ```
 
 The test refuses any non-loopback URL. It is skipped when `QUIZ_TEST_ORIGIN` is unset.
