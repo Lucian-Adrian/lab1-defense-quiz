@@ -1,5 +1,6 @@
 export const QUIZ_LENGTH = 15;
 export const QUESTION_SECONDS = 10;
+export const FEEDBACK_SECONDS = 1.5;
 
 export type PublicQuestion = {
   prompt: string;
@@ -14,8 +15,20 @@ export type QuizFeedback = {
   rationale: string;
 };
 
+export type QuizReviewItem = {
+  questionNumber: number;
+  topic: string;
+  prompt: string;
+  selectedAnswer: string | null;
+  correctAnswer: string;
+  correct: boolean;
+  timedOut: boolean;
+  rationale: string;
+};
+
 export type QuizState = {
   status: "not_started" | "playing" | "complete";
+  attemptId?: string;
   playerName?: string;
   questionIndex?: number;
   questionNumber?: number;
@@ -28,9 +41,12 @@ export type QuizState = {
   feedback?: QuizFeedback | null;
   grade?: number;
   elapsedMs?: number;
+  reviewAvailable?: boolean;
+  review?: QuizReviewItem[];
 };
 
 export type LeaderboardEntry = {
+  id: string;
   rank: number;
   name: string;
   correctCount: number;

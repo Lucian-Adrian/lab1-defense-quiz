@@ -13,5 +13,7 @@ export const quizAttempts = sqliteTable("quiz_attempts", {
   lastFeedbackQuestionIndex: integer("last_feedback_question_index"),
   lastFeedbackCorrect: integer("last_feedback_correct"),
   lastFeedbackTimedOut: integer("last_feedback_timed_out").notNull().default(0),
+  answersJson: text("answers_json").notNull().default("[]"),
+  reviewVersion: integer("review_version").notNull().default(0),
   createdAt: integer("created_at").notNull(),
 });

@@ -1,15 +1,17 @@
 import { env } from "cloudflare:workers";
 import { getQuestion } from "./quiz-bank";
 import {
+  FEEDBACK_SECONDS,
   QUESTION_SECONDS,
   QUIZ_LENGTH,
   type LeaderboardEntry,
   type LeaderboardState,
+  type QuizReviewItem,
   type QuizState,
 } from "./quiz-contract";
 
 const QUESTION_MS = QUESTION_SECONDS * 1000;
-const FEEDBACK_MS = 850;
+const FEEDBACK_MS = FEEDBACK_SECONDS * 1000;
 const SESSION_COOKIE = "lab1_quiz_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
@@ -26,6 +28,8 @@ type AttemptRow = {
   last_feedback_question_index: number | null;
   last_feedback_correct: number | null;
   last_feedback_timed_out: number;
+  answers_json: string;
+  review_version: number;
   created_at: number;
 };
 
@@ -62,7 +66,7 @@ async function findAttempt(tokenHash: string): Promise<AttemptRow | null> {
       `SELECT token_hash, player_name, question_index, correct_count,
               total_elapsed_ms, started_at, question_started_at, deadline_at,
               finished_at, last_feedback_question_index, last_feedback_correct,
-              last_feedback_timed_out, created_at
+              last_feedback_timed_out, answers_json, review_version, created_at
        FROM quiz_attempts WHERE token_hash = ? LIMIT 1`,
     )
     .bind(tokenHash)
@@ -124,14 +128,78 @@ function gradeFor(correctCount: number): number {
   return Math.min(10, Math.max(1, rounded));
 }
 
+function readRecordedAnswers(answersJson: string): Map<number, number> | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(answersJson);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+
+  const answers = new Map<number, number>();
+  for (const value of parsed) {
+    if (typeof value !== "object" || value === null) return null;
+    const record = value as Record<string, unknown>;
+    const questionIndex = record.questionIndex;
+    const choiceIndex = record.choiceIndex;
+    if (
+      !Number.isInteger(questionIndex) ||
+      (questionIndex as number) < 0 ||
+      (questionIndex as number) >= QUIZ_LENGTH ||
+      !Number.isInteger(choiceIndex) ||
+      (choiceIndex as number) < 0 ||
+      (choiceIndex as number) > 3 ||
+      answers.has(questionIndex as number)
+    ) {
+      return null;
+    }
+    answers.set(questionIndex as number, choiceIndex as number);
+  }
+  return answers;
+}
+
+function buildReview(attempt: AttemptRow): QuizReviewItem[] | null {
+  if (attempt.review_version !== 1) return null;
+  const answers = readRecordedAnswers(attempt.answers_json);
+  if (!answers) return null;
+
+  let recordedCorrectCount = 0;
+  const review: QuizReviewItem[] = [];
+  for (let questionIndex = 0; questionIndex < QUIZ_LENGTH; questionIndex += 1) {
+    const question = getQuestion(questionIndex);
+    if (!question) return null;
+
+    const choiceIndex = answers.get(questionIndex);
+    const timedOut = choiceIndex === undefined;
+    const correct = !timedOut && choiceIndex === question.correctIndex;
+    if (correct) recordedCorrectCount += 1;
+
+    review.push({
+      questionNumber: questionIndex + 1,
+      topic: question.topic,
+      prompt: question.prompt,
+      selectedAnswer: timedOut ? null : question.choices[choiceIndex],
+      correctAnswer: question.choices[question.correctIndex],
+      correct,
+      timedOut,
+      rationale: question.rationale,
+    });
+  }
+
+  return recordedCorrectCount === attempt.correct_count ? review : null;
+}
+
 function makeState(attempt: AttemptRow, now: number): QuizState {
   const isComplete = attempt.finished_at !== null || attempt.question_index >= QUIZ_LENGTH;
+  const review = isComplete ? buildReview(attempt) : null;
   const lastFeedbackIndex = attempt.last_feedback_question_index;
-  const feedbackIsCurrent =
+  const feedbackQuestion =
     lastFeedbackIndex !== null &&
-    lastFeedbackIndex === Math.min(attempt.question_index - 1, QUIZ_LENGTH - 1);
-  const feedbackQuestion = feedbackIsCurrent ? getQuestion(lastFeedbackIndex) : undefined;
-  const feedback = feedbackQuestion
+    lastFeedbackIndex === Math.min(attempt.question_index - 1, QUIZ_LENGTH - 1)
+      ? getQuestion(lastFeedbackIndex)
+      : undefined;
+  const feedback = lastFeedbackIndex !== null && feedbackQuestion
     ? {
         questionNumber: lastFeedbackIndex + 1,
         correct: attempt.last_feedback_correct === 1,
@@ -144,6 +212,7 @@ function makeState(attempt: AttemptRow, now: number): QuizState {
 
   return {
     status: isComplete ? "complete" : "playing",
+    attemptId: attempt.token_hash.slice(0, 16),
     playerName: attempt.player_name,
     questionIndex: attempt.question_index,
     questionNumber: Math.min(attempt.question_index + 1, QUIZ_LENGTH),
@@ -161,7 +230,13 @@ function makeState(attempt: AttemptRow, now: number): QuizState {
     deadlineAt: attempt.deadline_at,
     serverTime: now,
     feedback,
-    ...(isComplete ? { grade: gradeFor(attempt.correct_count) } : {}),
+    ...(isComplete
+      ? {
+          grade: gradeFor(attempt.correct_count),
+          reviewAvailable: review !== null,
+          ...(review ? { review } : {}),
+        }
+      : {}),
     elapsedMs: attempt.total_elapsed_ms,
   };
 }
@@ -181,8 +256,8 @@ export async function startAttempt(playerName: string): Promise<{ token: string;
          token_hash, player_name, question_index, correct_count, total_elapsed_ms,
          started_at, question_started_at, deadline_at, finished_at,
          last_feedback_question_index, last_feedback_correct, last_feedback_timed_out,
-         created_at
-       ) VALUES (?, ?, 0, 0, 0, ?, ?, ?, NULL, NULL, NULL, 0, ?)`,
+         answers_json, review_version, created_at
+       ) VALUES (?, ?, 0, 0, 0, ?, ?, ?, NULL, NULL, NULL, 0, '[]', 1, ?)`,
     )
     .bind(tokenHash, playerName, now, now, now + QUESTION_MS, now)
     .run();
@@ -264,6 +339,8 @@ export async function answerQuestion(request: Request, input: AnswerInput): Prom
       `UPDATE quiz_attempts
        SET question_index = ?, correct_count = correct_count + ?,
            total_elapsed_ms = total_elapsed_ms + ?,
+           answers_json = json_insert(answers_json, '$[#]',
+             json_object('questionIndex', ?, 'choiceIndex', ?)),
            question_started_at = ?, deadline_at = ?, finished_at = ?,
            last_feedback_question_index = ?, last_feedback_correct = ?,
            last_feedback_timed_out = 0
@@ -275,6 +352,8 @@ export async function answerQuestion(request: Request, input: AnswerInput): Prom
       nextQuestionIndex,
       isCorrect ? 1 : 0,
       elapsedMs,
+      attempt.question_index,
+      input.choiceIndex!,
       nextStartAt,
       nextDeadlineAt,
       newFinishedAt,
@@ -342,7 +421,7 @@ export async function getLeaderboard(): Promise<LeaderboardState> {
       `SELECT token_hash, player_name, question_index, correct_count,
               total_elapsed_ms, started_at, question_started_at, deadline_at,
               finished_at, last_feedback_question_index, last_feedback_correct,
-              last_feedback_timed_out, created_at
+              last_feedback_timed_out, answers_json, review_version, created_at
        FROM quiz_attempts
        ORDER BY correct_count DESC, total_elapsed_ms ASC, created_at ASC, player_name COLLATE NOCASE ASC
        LIMIT 2000`,
@@ -350,6 +429,7 @@ export async function getLeaderboard(): Promise<LeaderboardState> {
     .all<AttemptRow>();
 
   const players: LeaderboardEntry[] = (latest.results ?? []).map((attempt, index) => ({
+    id: attempt.token_hash.slice(0, 16),
     rank: index + 1,
     name: attempt.player_name,
     correctCount: attempt.correct_count,

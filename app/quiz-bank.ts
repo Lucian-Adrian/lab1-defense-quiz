@@ -1,103 +1,119 @@
 type QuizQuestion = {
+  topic: string;
   prompt: string;
   choices: [string, string, string, string];
   correctIndex: number;
   rationale: string;
 };
 
-// Keep answer keys in this server-only module. API routes import this file;
-// client components receive prompts and choices from the API only.
+// Keep answer keys in this server-only module. API routes can select only the
+// public fields, while reviews may use the topic and rationale.
 export const quizQuestions: QuizQuestion[] = [
   {
-    prompt: "A CPU has 4 physical cores and 2 hardware threads per core. How many logical processors can the OS schedule?",
-    choices: ["2", "4", "8", "16"],
+    topic: "Processors",
+    prompt: "Four cores expose two hardware threads each. How many logical processors does the OS see?",
+    choices: ["4 processors","6 processors","8 processors","16 processors"],
     correctIndex: 2,
-    rationale: "Each physical core exposes two hardware threads, so the OS sees eight logical processors.",
+    rationale: "Each core exposes two hardware threads, so four cores provide eight logical processors. These are schedulable contexts, not eight full physical cores.",
   },
   {
-    prompt: "If 10% of a program is serial, what is its theoretical maximum speedup with infinitely many workers?",
-    choices: ["2×", "5×", "10×", "Unlimited"],
+    topic: "Amdahl's law",
+    prompt: "Ten percent of a program is serial. What ideal limit remains with infinitely many cores?",
+    choices: ["2 times","5 times","10 times","Unlimited"],
     correctIndex: 2,
-    rationale: "The serial 10% remains, so Amdahl's law caps speedup at 1 ÷ 0.10 = 10.",
+    rationale: "Amdahl's law leaves the serial 10 percent unchanged, so the ideal limit is 1 divided by 0.10, or 10 times. Real overhead lowers observed speedup.",
   },
   {
-    prompt: "You created 64 threads. Which part actually executes instructions?",
-    choices: ["CPU cores", "Software threads", "The queue", "The input file"],
+    topic: "Thread scheduling",
+    prompt: "For 64 software threads, what hardware executes their instructions?",
+    choices: ["CPU core hardware","Operating-system scheduler","Thread pool","Work queue"],
     correctIndex: 0,
-    rationale: "CPU execution hardware runs instructions; the OS schedules software threads onto available physical or logical processors, with overhead as thread counts grow.",
+    rationale: "The operating system schedules software threads onto available logical processors, whose CPU core hardware executes instructions. The scheduler and queue organize work but do not compute results.",
   },
   {
-    prompt: "Two threads run `count++` without synchronization. What can happen?",
-    choices: ["A lost update", "The increment becomes atomic", "The counter resets", "The threads merge"],
+    topic: "Lost updates",
+    prompt: "Two threads increment one shared counter without synchronization. What risk can occur?",
+    choices: ["One update is overwritten","The increment becomes atomic","The scheduler prevents interleaving","Each thread gets a private copy"],
     correctIndex: 0,
-    rationale: "The read, add, and write are separate steps, so both threads can read the same old value and overwrite one increment.",
+    rationale: "An increment has separate read, add and write steps. If both threads read the same old value, both may write the same replacement and lose one update.",
   },
   {
-    prompt: "What should a mutex protect when several threads increment a shared counter?",
-    choices: ["Only the final write", "Only the read", "The whole read-modify-write", "The thread creation"],
+    topic: "Mutex scope",
+    prompt: "To protect a shared increment, which steps go inside the mutex?",
+    choices: ["Only the read","Only the write","Read, add, write","Add and write only"],
     correctIndex: 2,
-    rationale: "Locking the complete read-modify-write sequence prevents another thread from using the same old value.",
+    rationale: "An increment reads a shared value, calculates a replacement, then writes it. Locking all three steps prevents another thread from reading the same old value.",
   },
   {
-    prompt: "Each worker counts in a private local variable. When should the program combine those totals?",
-    choices: ["Before workers start", "After all workers join", "Every loop iteration", "While holding one global lock"],
+    topic: "Local counters",
+    prompt: "Workers count privately. When do you combine their totals?",
+    choices: ["Before workers start","After all workers finish","After each item","During every update"],
     correctIndex: 1,
-    rationale: "After joining, each local total is complete and can be combined once without locking every increment.",
+    rationale: "Once all workers finish, each private total is final. Combining those results once avoids coordinating a shared counter during the hot loop.",
   },
   {
-    prompt: "A file line crosses a byte-offset partition. Which worker owns that line?",
-    choices: ["The worker whose range contains the line's first byte", "The worker whose range contains its last byte", "Both workers that share the boundary", "The worker that reads it fastest"],
+    topic: "File boundaries",
+    prompt: "A partition cuts through a line. Which worker owns that line?",
+    choices: ["Range with first byte","Range with last byte","Both, then dedupe","First to read it"],
     correctIndex: 0,
-    rationale: "Assigning a line by the byte offset of its first byte gives one worker a clear ownership decision at a partition boundary.",
+    rationale: "Using the first byte as a line's owner gives every complete line exactly one worker, even when a partition boundary falls inside it.",
   },
   {
-    prompt: "A bounded work queue is full. What should its producer do?",
-    choices: ["Discard the next item", "Wait until space is available", "Create an unbounded second queue", "Close the workers"],
+    topic: "Backpressure",
+    prompt: "A blocking bounded queue is full. What does the producer do?",
+    choices: ["Store beyond the limit","Wait for a free slot","Drop the new item","Stop the workers"],
     correctIndex: 1,
-    rationale: "A bounded queue applies backpressure by making the producer wait for a free slot.",
+    rationale: "A blocking bounded queue applies backpressure: the producer waits until a consumer frees capacity, keeping waiting items within the queue limit.",
   },
   {
-    prompt: "A worker checks an empty queue that may receive more work. What should it do?",
-    choices: ["Read a random item", "Wait for work or a completion signal", "Declare the whole task done", "Grow the queue limit"],
+    topic: "Empty queue",
+    prompt: "The queue is empty, but more work may arrive. What should a worker do?",
+    choices: ["Exit now","Wait for work or completion","Keep checking continuously","Add an empty batch"],
     correctIndex: 1,
-    rationale: "An empty queue is temporary until the producer signals that no more work will arrive.",
+    rationale: "An empty queue may be temporary. A worker should wait for another item or a completion signal, rather than exiting before input is finished.",
   },
   {
-    prompt: "When can queue workers stop safely after input has ended?",
-    choices: ["As soon as the producer closes", "After queued work drains", "When one worker finishes", "Before the last batch"],
+    topic: "Queue completion",
+    prompt: "When can workers stop after the producer finishes?",
+    choices: ["When reading stops","After no more items can arrive and the queue is empty","On first empty check","When one worker finishes"],
     correctIndex: 1,
-    rationale: "Workers must finish queued items before they exit after end-of-input is signaled.",
+    rationale: "The completion signal says no further items will arrive, and draining ensures every accepted batch is processed before workers exit.",
   },
   {
-    prompt: "Why can a queue of one-line batches run slowly?",
-    choices: ["Batches cannot be counted", "Coordination can cost more than the work", "The queue disables the CPU", "Files become larger"],
+    topic: "Batch size",
+    prompt: "Why can one-line batches lower queue throughput?",
+    choices: ["Parsing becomes serial","Coordination repeats for little work","Queue loses item order","Workers share one counter"],
     correctIndex: 1,
-    rationale: "Tiny batches add frequent synchronization and scheduling overhead around very little useful work.",
+    rationale: "Each batch needs queue coordination and scheduling. With one line per item, that cost repeats often and can exceed the small amount of work per batch.",
   },
   {
-    prompt: "A producer is faster than its workers and the queue has no limit. What is the main risk?",
-    choices: ["The backlog can consume growing memory", "The queue becomes bounded", "The workers duplicate every item", "The producer loses its CPU core"],
+    topic: "Unbounded backlog",
+    prompt: "With no queue limit, producers outpace workers. What risk grows?",
+    choices: ["Pending work keeps using memory","Queue applies backpressure","Workers auto-scale","Items are discarded"],
     correctIndex: 0,
-    rationale: "An unbounded queue can retain work faster than workers consume it, allowing memory use to grow.",
+    rationale: "Without a capacity bound or other backpressure, queued batches remain in memory and can accumulate faster than workers remove them.",
   },
   {
-    prompt: "What does a bounded queue limit when workers are busy?",
-    choices: ["All memory used by the process", "Only pending queued batches", "The number of active workers", "The size of every source file"],
+    topic: "Queue memory",
+    prompt: "A bounded queue is full while workers hold active batches. What does capacity limit?",
+    choices: ["All process memory","Waiting queue items","Waiting plus active batches","The whole input file"],
     correctIndex: 1,
-    rationale: "A queue limit bounds waiting batches, while active workers can still each hold their own batch in memory.",
+    rationale: "Capacity bounds only items waiting in the queue. Active workers may each hold a batch, while buffers, stacks, and runtime use additional memory.",
   },
   {
-    prompt: "Several workers read files from the same USB device. Which resource may limit their combined throughput?",
-    choices: ["The device and its shared I/O path", "Only each worker's private cache", "The number of file names", "The desktop resolution"],
+    topic: "Shared I/O",
+    prompt: "Several threads read the same USB drive. Which limit do they share?",
+    choices: ["Device bandwidth and I/O path","Independent bandwidth per file","New USB bandwidth per worker","One device channel per thread"],
     correctIndex: 0,
-    rationale: "Workers can share the USB device's bandwidth and controller, so adding readers may not add device throughput.",
+    rationale: "All requests still use the same device and I/O path. They can overlap, but adding workers does not create additional USB bandwidth.",
   },
   {
-    prompt: "Why can concurrent requests to independent network servers reduce waiting time?",
-    choices: ["They remove all network latency", "One request can wait while another makes progress", "They force one server to finish first", "They turn I/O into CPU work"],
+    topic: "Network concurrency",
+    prompt: "When can concurrent requests to independent servers reduce waiting?",
+    choices: ["It reduces each server's processing time","Independent waits can overlap","It guarantees a faster total time","It lowers each request's latency"],
     correctIndex: 1,
-    rationale: "Independent requests can overlap their waits when server and network capacity allow it.",
-  },
+    rationale: "Independent requests can overlap while earlier ones wait, reducing elapsed waiting when server and network capacity allow. Concurrency does not remove latency or guarantee speedup.",
+  }
 ];
 
 export function getQuestion(index: number): QuizQuestion | undefined {

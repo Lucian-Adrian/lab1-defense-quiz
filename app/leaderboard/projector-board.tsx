@@ -8,6 +8,9 @@ export default function LeaderboardBoard() {
   const [board, setBoard] = useState<LeaderboardState | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
+  const [pagingMode, setPagingMode] = useState<"all" | "auto">("all");
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pagingPaused, setPagingPaused] = useState(false);
 
   const updateBoard = useCallback(async () => {
     try {
@@ -30,6 +33,33 @@ export default function LeaderboardBoard() {
       document.removeEventListener("fullscreenchange", syncFullscreen);
     };
   }, [updateBoard]);
+
+  const players = board?.players ?? [];
+  const canPage = players.length > 10;
+  const pageCount = Math.max(1, Math.ceil(Math.max(0, players.length - 3) / 7));
+
+  useEffect(() => {
+    setPageIndex((current) => Math.min(current, pageCount - 1));
+  }, [pageCount]);
+
+  useEffect(() => {
+    if (!canPage || pagingMode !== "auto" || pagingPaused || pageCount < 2) return;
+    const interval = window.setInterval(() => {
+      setPageIndex((current) => (current + 1) % pageCount);
+    }, 8000);
+    return () => window.clearInterval(interval);
+  }, [canPage, pageCount, pagingMode, pagingPaused]);
+
+  const pageStart = 3 + pageIndex * 7;
+  const visiblePlayers = canPage && pagingMode === "auto"
+    ? [...players.slice(0, 3), ...players.slice(pageStart, pageStart + 7)]
+    : players;
+  const visiblePagePlayers = visiblePlayers.slice(3);
+  const rangeLabel = canPage && pagingMode === "auto" && visiblePagePlayers.length > 0
+    ? `Ranks 1–3 + ${visiblePagePlayers[0].rank}–${visiblePagePlayers[visiblePagePlayers.length - 1].rank} of ${board?.playerCount ?? players.length}`
+    : players.length > 0
+      ? `Ranks 1–${players[players.length - 1].rank} of ${board?.playerCount ?? players.length}`
+      : `Ranks 0 of ${board?.playerCount ?? 0}`;
 
   const toggleFullscreen = async () => {
     try {
@@ -60,8 +90,8 @@ export default function LeaderboardBoard() {
             <table className="board-table">
               <thead><tr><th scope="col">#</th><th scope="col">Student</th><th scope="col">Grade / 10</th><th scope="col">Correct</th><th scope="col">Progress</th></tr></thead>
               <tbody>
-                {board?.players.map((player) => (
-                  <tr key={`${player.rank}-${player.name}`} className={player.rank <= 3 ? `top-rank top-rank-${player.rank}` : ""}>
+                {visiblePlayers.map((player) => (
+                  <tr key={player.id} className={player.rank <= 3 ? `top-rank top-rank-${player.rank}` : ""}>
                     <td><span className="rank-badge">{player.rank}</span></td>
                     <td><span className="student-cell"><span className="student-avatar">{player.name.trim().slice(0, 1).toLocaleUpperCase()}</span><span className="player-name">{player.name}</span></span></td>
                     <td><span className="grade-value">{player.grade.toFixed(1)}<small> / 10</small></span></td>
@@ -75,6 +105,52 @@ export default function LeaderboardBoard() {
               </tbody>
             </table>
           </div>
+          {canPage && (
+            <div className="board-paging">
+              <span className="board-paging-range" aria-live="polite">{rangeLabel}</span>
+              <div className="board-paging-controls">
+                <label className="sr-only" htmlFor="board-display-mode">Leaderboard display</label>
+                <select
+                  id="board-display-mode"
+                  className="board-mode-select"
+                  value={pagingMode}
+                  onChange={(event) => {
+                    setPagingMode(event.target.value as "all" | "auto");
+                    setPageIndex(0);
+                    setPagingPaused(false);
+                  }}
+                >
+                  <option value="all">All players</option>
+                  <option value="auto">Auto paging</option>
+                </select>
+                {pagingMode === "auto" && (
+                  <>
+                    <button
+                      className="board-page-button"
+                      type="button"
+                      aria-label="Previous leaderboard page"
+                      disabled={pageCount < 2}
+                      onClick={() => setPageIndex((current) => (current - 1 + pageCount) % pageCount)}
+                    >
+                      ‹
+                    </button>
+                    <button className="board-pause-button" type="button" onClick={() => setPagingPaused((paused) => !paused)}>
+                      {pagingPaused ? "Resume" : "Pause"}
+                    </button>
+                    <button
+                      className="board-page-button"
+                      type="button"
+                      aria-label="Next leaderboard page"
+                      disabled={pageCount < 2}
+                      onClick={() => setPageIndex((current) => (current + 1) % pageCount)}
+                    >
+                      ›
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
           {unavailable && <p className="board-error" role="status">Connection paused. The board will retry automatically.</p>}
         </section>
 

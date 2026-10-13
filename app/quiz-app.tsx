@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { LeaderboardState, QuizState } from "./quiz-contract";
+import type { LeaderboardState, QuizReviewItem, QuizState } from "./quiz-contract";
 
 type QuizApiResponse = { state: QuizState | null; error?: string };
 type StateAcceptance = "accepted" | "stale" | "pending" | "missing";
@@ -23,6 +23,19 @@ function isQuizFeedback(value: unknown): boolean {
     typeof value.rationale === "string");
 }
 
+function isQuizReviewItem(value: unknown): boolean {
+  return isRecord(value) &&
+    typeof value.questionNumber === "number" && Number.isInteger(value.questionNumber) &&
+    value.questionNumber >= 1 && value.questionNumber <= 15 &&
+    typeof value.topic === "string" &&
+    typeof value.prompt === "string" &&
+    (value.selectedAnswer === null || typeof value.selectedAnswer === "string") &&
+    typeof value.correctAnswer === "string" &&
+    typeof value.correct === "boolean" &&
+    typeof value.timedOut === "boolean" &&
+    typeof value.rationale === "string";
+}
+
 function isQuizState(value: unknown): value is QuizState {
   if (!isRecord(value) || !isFiniteNumber(value.serverTime)) return false;
   if (value.status === "not_started") return true;
@@ -42,6 +55,8 @@ function isQuizState(value: unknown): value is QuizState {
     return false;
   }
 
+  if (value.attemptId !== undefined && typeof value.attemptId !== "string") return false;
+
   const questionIndex = value.questionIndex as number;
   const completedQuestions = value.completedQuestions as number;
   const correctCount = value.correctCount as number;
@@ -53,9 +68,18 @@ function isQuizState(value: unknown): value is QuizState {
   ) return false;
 
   if (value.status === "complete") {
-    return questionIndex === 15 && completedQuestions === 15 &&
-      isFiniteNumber(value.grade) && value.grade >= 1 && value.grade <= 10;
+    if (
+      questionIndex !== 15 || completedQuestions !== 15 ||
+      !isFiniteNumber(value.grade) || value.grade < 1 || value.grade > 10
+    ) return false;
+    if (value.reviewAvailable !== undefined && typeof value.reviewAvailable !== "boolean") return false;
+    if (value.reviewAvailable === true) {
+      return Array.isArray(value.review) && value.review.length === 15 && value.review.every(isQuizReviewItem);
+    }
+    return value.review === undefined;
   }
+
+  if (value.reviewAvailable !== undefined || value.review !== undefined) return false;
 
   const question = value.question;
   return questionIndex >= 0 && questionIndex < 15 &&
@@ -108,7 +132,7 @@ function JoinLeaderboard() {
       <p className="mini-grade-label">Practice grade / 10</p>
       <div className="mini-board-rows">
         {board?.players.slice(0, 3).map((player) => (
-          <div className={`mini-board-row mini-rank-${player.rank}`} key={`${player.rank}-${player.name}`}>
+            <div className={`mini-board-row mini-rank-${player.rank}`} key={player.id}>
             <span className="mini-rank-number">{player.rank}</span>
             <span className="mini-avatar">{player.name.trim().slice(0, 1).toLocaleUpperCase()}</span>
             <b>{player.name}</b>
@@ -118,6 +142,122 @@ function JoinLeaderboard() {
         {(!board || board.players.length === 0) && <p className="mini-empty">No players yet. Join to start the board.</p>}
       </div>
     </div>
+  );
+}
+
+function ResultReview({ state }: { state: QuizState }) {
+  const [rank, setRank] = useState<{ position: number; total: number } | null>(null);
+  const [rankUnavailable, setRankUnavailable] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    const attemptId = state.attemptId;
+    if (!attemptId) {
+      setRankUnavailable(true);
+      return;
+    }
+
+    let mounted = true;
+    const refreshRank = async () => {
+      try {
+        const response = await fetch("/api/leaderboard", { cache: "no-store" });
+        if (!response.ok) throw new Error("Leaderboard unavailable");
+        const board = (await response.json()) as LeaderboardState;
+        if (!mounted) return;
+        const player = board.players.find((entry) => entry.id === attemptId);
+        setRank(player ? { position: player.rank, total: board.playerCount } : null);
+        setRankUnavailable(false);
+      } catch {
+        if (mounted) setRankUnavailable(true);
+      }
+    };
+
+    void refreshRank();
+    const interval = window.setInterval(() => void refreshRank(), 4000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, [state.attemptId]);
+
+  const review = state.reviewAvailable && Array.isArray(state.review) ? state.review : [];
+  const missed = review.filter((item) => !item.correct);
+  const visibleReview = showAll ? review : missed;
+
+  return (
+    <>
+      <div className="result-rank" aria-live="polite">
+        <span>Your class rank</span>
+        <strong>{rank ? `#${rank.position}` : rankUnavailable ? "Unavailable" : "…"}<small>{rank ? ` of ${rank.total}` : ""}</small></strong>
+        {!rank && <span className="result-rank-note">{rankUnavailable ? "Rank unavailable for this round." : "Checking the live board…"}</span>}
+      </div>
+
+      {state.reviewAvailable && review.length > 0 && (
+        <section className="result-review" aria-label="Answer review">
+          <button
+            className="review-toggle"
+            type="button"
+            aria-expanded={reviewOpen}
+            onClick={() => setReviewOpen((open) => !open)}
+          >
+            <span>{reviewOpen ? "Hide review" : "Review missed answers"}</span>
+            <b>{missed.length}</b>
+          </button>
+          {reviewOpen && (
+            <>
+              {review.length > 0 && (
+                <div className="review-filter">
+                  <button type="button" aria-pressed={!showAll} onClick={() => setShowAll(false)}>
+                    Missed only ({missed.length})
+                  </button>
+                  <button type="button" aria-pressed={showAll} onClick={() => setShowAll(true)}>
+                    All {review.length} questions
+                  </button>
+                </div>
+              )}
+              <div className="review-list">
+                {visibleReview.map((item, index) => (
+                  <ReviewCard key={item.questionNumber} item={item} initiallyOpen={index === 0} />
+                ))}
+                {visibleReview.length === 0 && (
+                  <p className="review-empty">No missed answers. You can still review all {review.length} questions above.</p>
+                )}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
+function ReviewCard({ item, initiallyOpen }: { item: QuizReviewItem; initiallyOpen: boolean }) {
+  return (
+    <details className={`review-item ${item.correct ? "review-correct" : "review-missed"}`} open={initiallyOpen}>
+      <summary>
+        <span className="review-heading">
+          <b>{item.topic}</b>
+          <small>Question {item.questionNumber}</small>
+        </span>
+        <span className="review-prompt">{item.prompt}</span>
+        <span className="review-chevron" aria-hidden="true">⌄</span>
+      </summary>
+      <div className="review-answer-grid">
+        <div>
+          <span>Your answer</span>
+          <p>{item.selectedAnswer ?? (item.timedOut ? "No answer (time ran out)" : "No answer recorded")}</p>
+        </div>
+        <div>
+          <span>Correct answer</span>
+          <p>{item.correctAnswer}</p>
+        </div>
+        <div className="review-rationale">
+          <span>Why</span>
+          <p>{item.rationale}</p>
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -380,12 +520,13 @@ export default function QuizApp() {
             </div>
           </section>
         ) : state.status === "complete" ? (
-          <section className="result-card" aria-labelledby="result-title">
+          <section className="result-card review-result" aria-labelledby="result-title">
             <p className="eyebrow"><span className="eyebrow-dot" /> ROUND COMPLETE</p>
             <h1 id="result-title">Nice work, {state.playerName}.</h1>
             <p className="result-intro">Here is your practice result from this Lab 1 round.</p>
             <div className="result-grade"><span>Practice grade</span><strong>{state.grade?.toFixed(1)}<small> / 10</small></strong></div>
             <div className="result-stats"><div><b>{state.correctCount ?? 0}<small> / 15</small></b><span>correct</span></div><div><b>{((state.elapsedMs ?? 0) / 1000).toFixed(1)}<small> s</small></b><span>answer time</span></div></div>
+            <ResultReview state={state} />
             <div className="result-actions"><a className="primary-button" href="/leaderboard">See the class board <span aria-hidden="true">→</span></a><button className="secondary-button" type="button" onClick={() => void playAgain()} disabled={busy}>Play another round</button></div>
             <p className="grade-note">Practice grade only. This is not an academic course grade.</p>
           </section>

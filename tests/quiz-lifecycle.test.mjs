@@ -45,15 +45,28 @@ test("full round resumes, replays, and rejects a late answer in local D1", { ski
   const name = `Full round ${suffix}`;
   const round = await startPlayer(name);
   let current = round.state;
+  assert.equal(current.review, undefined, "the review stays hidden during the round");
+  assert.match(current.attemptId, /^[0-9a-f]{16}$/);
 
   for (let index = 0; index < 15; index += 1) {
     assert.equal(current.status, "playing");
     assert.equal(current.questionIndex, index);
     await waitForQuestion(current);
+    if (index === 0) {
+      await delay(Math.max(0, current.deadlineAt - Date.now() + 70));
+      current = await getState(round.cookie);
+      assert.equal(current.questionIndex, 1);
+      continue;
+    }
     const response = await answer(round.cookie, index, 0);
     current = await response.json();
     assert.equal(response.status, 200, JSON.stringify(current));
     assert.equal(current.questionIndex, index + 1);
+    if (index < 14) assert.equal(current.review, undefined);
+    if (index === 1) {
+      const duplicate = await answer(round.cookie, index, 0);
+      assert.equal(duplicate.status, 409);
+    }
     if (index === 5) {
       current = await getState(round.cookie);
       assert.equal(current.status, "playing");
@@ -66,11 +79,24 @@ test("full round resumes, replays, and rejects a late answer in local D1", { ski
   assert.equal(current.completedQuestions, 15);
   assert.equal(current.correctCount, 5, "the all-A test run matches the question bank");
   assert.equal(current.grade, 3.3);
+  assert.equal(current.reviewAvailable, true);
+  assert.equal(current.review.length, 15);
+  assert.equal(current.review.filter((item) => item.correct).length, 5);
+  assert.equal(current.review.filter((item) => item.timedOut).length, 1);
+  assert.equal(current.review[0].selectedAnswer, null);
+  for (const [index, item] of current.review.entries()) {
+    assert.equal(item.questionNumber, index + 1);
+    assert.ok(item.topic && item.rationale && item.correctAnswer);
+    if (index > 0) assert.ok(item.selectedAnswer);
+  }
 
   const recovered = await getState(round.cookie);
   assert.equal(recovered.status, "complete", "refresh restores the finished result");
   assert.equal(recovered.correctCount, current.correctCount);
   assert.equal(recovered.grade, current.grade);
+  assert.deepEqual(recovered.review, current.review, "saved answers survive a refresh without duplicate history");
+  const board = await (await fetch(`${origin}/api/leaderboard`)).json();
+  assert.ok(board.players.some((player) => player.id === current.attemptId));
 
   const replay = await startPlayer(name);
   assert.notEqual(replay.cookie, round.cookie, "replay starts a fresh opaque attempt");

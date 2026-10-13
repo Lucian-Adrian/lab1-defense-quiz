@@ -14,10 +14,11 @@ Requirements: Node.js 22.13 or newer, npm, and a local D1 binding named `DB`.
 npm ci
 npm run build
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_outstanding_lightspeed.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0001_dashing_black_tom.sql
 npm run dev
 ```
 
-Apply the included migration once to a new local D1 database before opening the quiz. Local preview state lives under `.wrangler/state`. Generate a new migration with `npm run db:generate` only when the schema changes. Production hosting applies the committed migrations to its shared D1 database.
+Apply both included migrations once to a new local D1 database before opening the quiz. Local preview state lives under `.wrangler/state`. Generate a new migration with `npm run db:generate` only when the schema changes. Production hosting applies the committed migrations to its shared D1 database.
 
 For a built local Worker preview, run `npm run build` followed by `npm start`.
 
@@ -51,3 +52,9 @@ node --test tests/quiz-lifecycle.test.mjs
 ```
 
 The test refuses any non-loopback URL. It is skipped when `QUIZ_TEST_ORIGIN` is unset.
+
+After the result, students can review their missed questions and the reason behind each answer. Saved answer history survives refresh. Older attempts created before answer history was added keep their grade without an invented review.
+
+For a larger class, Auto view keeps the top three visible and rotates seven more rows every eight seconds. Pause or use the arrows to control it. All players restores the complete list. During a round, a 1.5-second answer note separates questions; the 10-second answer timer starts after that note.
+
+![Quiz improvements and local checks](quiz-improvements-review.png)
