@@ -2,7 +2,7 @@
 
 A name-only live quiz for the Network Programming Lab 1 class. Students answer 15 short multiple-choice questions, with a server-enforced 10-second limit per question. The shared projector board ranks correct answers first and total answer time second.
 
-Students: [join the quiz](https://lab1-defense-quiz.egoelevate.chatgpt.site). Projector: [live leaderboard](https://lab1-defense-quiz.egoelevate.chatgpt.site/leaderboard).
+Students: [join the quiz](https://lab1-defense-quiz.vercel.app). Projector: [live leaderboard](https://lab1-defense-quiz.vercel.app/leaderboard).
 
 Source: [Lucian-Adrian/lab1-defense-quiz](https://github.com/Lucian-Adrian/lab1-defense-quiz). The frontend is backed by a Cloudflare Worker and shared D1 database through Sites hosting. GitHub stores the public source; this server-backed quiz runs on the linked site.
 
@@ -16,6 +16,7 @@ npm run build
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_outstanding_lightspeed.sql
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0001_dashing_black_tom.sql
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0002_remove_verification_attempts.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0003_remove_vercel_verification.sql
 npm run dev
 ```
 
@@ -36,7 +37,7 @@ The answer key and rationales live in `app/quiz-bank.ts`, which is imported only
 
 The result is labeled **Practice grade**. It is clamped to 1.0–10.0 from the number correct out of 15 and is not an academic course grade.
 
-The board refreshes every four seconds and lists up to 2,000 attempts. A replay creates another attempt. The database is shared across visitors; the design target's sample players are not included. The two public verification attempts were removed after the end-to-end check.
+The board refreshes every four seconds and lists up to 2,000 attempts. A replay creates another attempt. The database is shared across visitors; the design target's sample players are not included. Public verification attempts are removed after their end-to-end checks.
 
 Temporary service errors preserve the displayed round and trigger automatic recovery. Delayed responses cannot replace a newer question or a fresh replay. The server continues enforcing deadlines while a phone reconnects.
 
@@ -59,3 +60,5 @@ After the result, students can review their missed questions and the reason behi
 For a larger class, Auto view keeps the top three visible and rotates seven more rows every eight seconds. Pause or use the arrows to control it. All players restores the complete list. During a round, a 1.5-second answer note separates questions; the 10-second answer timer starts after that note.
 
 ![Quiz improvements and local checks](quiz-improvements-review.png)
+
+The public Vercel project imports the hosting directory. Its external rewrites forward the quiz and API to the existing Worker and D1 backend, preserving the shared leaderboard. Keep the backend deployment running. The backend QR and classroom exports use the Vercel public URL.
