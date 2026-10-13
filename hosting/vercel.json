@@ -5,6 +5,10 @@
   "installCommand": null,
   "rewrites": [
     {
+      "source": "/",
+      "destination": "https://lab1-defense-quiz.egoelevate.chatgpt.site/"
+    },
+    {
       "source": "/:path*",
       "destination": "https://lab1-defense-quiz.egoelevate.chatgpt.site/:path*"
     }
