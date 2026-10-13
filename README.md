@@ -35,7 +35,7 @@ The answer key and rationales live in `app/quiz-bank.ts`, which is imported only
 
 The result is labeled **Practice grade**. It is clamped to 1.0–10.0 from the number correct out of 15 and is not an academic course grade.
 
-The board refreshes every four seconds and lists up to 2,000 attempts. A replay creates another attempt. The database is shared across visitors; production starts empty and does not include the design target's sample players.
+The board refreshes every four seconds and lists up to 2,000 attempts. A replay creates another attempt. The database is shared across visitors; the design target's sample players are not included. Public verification attempts are clearly labeled System check.
 
 Temporary service errors preserve the displayed round and trigger automatic recovery. Delayed responses cannot replace a newer question or a fresh replay. The server continues enforcing deadlines while a phone reconnects.
 

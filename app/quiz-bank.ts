@@ -53,7 +53,7 @@ export const quizQuestions: QuizQuestion[] = [
   },
   {
     topic: "File boundaries",
-    prompt: "A partition cuts through a line. Which worker owns that line?",
+    prompt: "In our file-partition rule, which range owns a line crossing a boundary?",
     choices: ["Range with first byte","Range with last byte","Both, then dedupe","First to read it"],
     correctIndex: 0,
     rationale: "Using the first byte as a line's owner gives every complete line exactly one worker, even when a partition boundary falls inside it.",
