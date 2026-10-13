@@ -506,10 +506,11 @@ export default function QuizApp() {
                       placeholder="e.g. Alex"
                       value={name}
                       onChange={(event) => setName(event.target.value)}
+                      disabled={!state}
                       required
                     />
-                    <button className="primary-button" type="submit" disabled={busy}>
-                      {busy ? "Starting…" : "Start quiz"}
+                    <button className="primary-button" type="submit" disabled={busy || !state}>
+                      {!state ? "Loading…" : busy ? "Starting…" : "Start quiz"}
                     </button>
                     <p className="form-note">Name only. No account needed.</p>
                   </form>
