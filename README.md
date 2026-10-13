@@ -15,10 +15,11 @@ npm ci
 npm run build
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_outstanding_lightspeed.sql
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0001_dashing_black_tom.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0002_remove_verification_attempts.sql
 npm run dev
 ```
 
-Apply both included migrations once to a new local D1 database before opening the quiz. Local preview state lives under `.wrangler/state`. Generate a new migration with `npm run db:generate` only when the schema changes. Production hosting applies the committed migrations to its shared D1 database.
+Apply the included migrations in order, once to a new local D1 database before opening the quiz. Local preview state lives under `.wrangler/state`. Generate a new migration with `npm run db:generate` only when the schema changes. Production hosting applies the committed migrations to its shared D1 database.
 
 For a built local Worker preview, run `npm run build` followed by `npm start`.
 
@@ -35,7 +36,7 @@ The answer key and rationales live in `app/quiz-bank.ts`, which is imported only
 
 The result is labeled **Practice grade**. It is clamped to 1.0–10.0 from the number correct out of 15 and is not an academic course grade.
 
-The board refreshes every four seconds and lists up to 2,000 attempts. A replay creates another attempt. The database is shared across visitors; the design target's sample players are not included. Public verification attempts are clearly labeled System check.
+The board refreshes every four seconds and lists up to 2,000 attempts. A replay creates another attempt. The database is shared across visitors; the design target's sample players are not included. The two public verification attempts were removed after the end-to-end check.
 
 Temporary service errors preserve the displayed round and trigger automatic recovery. Delayed responses cannot replace a newer question or a fresh replay. The server continues enforcing deadlines while a phone reconnects.
 
