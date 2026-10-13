@@ -157,12 +157,11 @@ a { color: inherit; text-decoration: none; }
 .board-table th:last-child { min-width: 220px; }
 .board-table td { height: 62px; padding: 0 12px; border-bottom: 1px solid #e2e5e9; color: #252930; font-size: 15px; white-space: nowrap; }
 .rank-badge { width: 39px; height: 39px; display: grid; place-items: center; border-radius: 50%; background: #eceef0; color: #252930; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.top-rank-1 td { background: #f1fbda; }
-.top-rank-1 td:first-child { border-radius: 10px 0 0 10px; }
-.top-rank-1 td:last-child { border-radius: 0 10px 10px 0; }
-.top-rank-1 .rank-badge { background: #111; color: #fff; }
-.top-rank-1 .student-avatar { background: var(--lime); }
-.top-rank-2 .rank-badge, .top-rank-3 .rank-badge { background: #e9ecee; }
+.top-rank-1 td, .top-rank-2 td, .top-rank-3 td { background: #f1fbda; }
+.top-rank-1 td:first-child, .top-rank-2 td:first-child, .top-rank-3 td:first-child { border-radius: 10px 0 0 10px; }
+.top-rank-1 td:last-child, .top-rank-2 td:last-child, .top-rank-3 td:last-child { border-radius: 0 10px 10px 0; }
+.top-rank-1 .rank-badge, .top-rank-2 .rank-badge, .top-rank-3 .rank-badge { background: var(--lime); color: #111; }
+.top-rank-1 .student-avatar, .top-rank-2 .student-avatar, .top-rank-3 .student-avatar { background: var(--lime); }
 .student-cell { display: flex; align-items: center; gap: 16px; }
 .student-avatar { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; background: #eceef0; color: #151719; font-size: 18px; font-weight: 800; }
 .player-name { color: #141618; font-size: 18px; font-weight: 700; }
